@@ -210,7 +210,9 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
 
 /* ── COBRANÇA ── */
 .cobr-card{background:white;border-radius:var(--radius);padding:18px;box-shadow:var(--shadow);border-left:4px solid var(--despesa);margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
-.cobr-card.ok{border-left-color:var(--receita);}
+.aluno-card.inativo{opacity:0.45;filter:grayscale(0.6);}
+.aluno-card.inativo h4{text-decoration:line-through;color:#aaa;}
+.badge-inativo{background:#bbb;color:white;padding:2px 8px;border-radius:20px;font-size:0.6rem;font-weight:700;margin-left:6px;}
 .cobr-card.alerta{border-left-color:#e67e22;}
 .cobr-info h4{margin:0 0 4px;font-size:0.92rem;color:var(--marrom);}
 .cobr-info p{margin:2px 0;font-size:0.76rem;color:#888;display:flex;align-items:center;gap:5px;}
@@ -584,9 +586,12 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
           <button class="btn" onclick="addAluno()">Cadastrar</button>
         </div>
       </div>
-      <!-- Busca -->
-      <div style="margin-bottom:14px;">
-        <input type="text" id="busca-aluno" placeholder="Buscar paciente..." style="max-width:320px;" oninput="renderAlunos()">
+      <div style="margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
+        <input type="text" id="busca-aluno" placeholder="Buscar paciente..." style="max-width:280px;" oninput="renderAlunos()">
+        <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:#888;cursor:pointer;">
+          <input type="checkbox" id="filtro-inativos" onchange="renderAlunos()" style="width:16px;height:16px;min-height:unset;border-radius:4px;">
+          Mostrar inativos
+        </label>
       </div>
       <div id="lista-alunos" class="aluno-grid"></div>
     </section>
@@ -1089,19 +1094,23 @@ function addAluno(){
   const modalidades=getModalidadesSelecionadas('a-modal-checks');
   if(!modalidades.length)return alert("Selecione ao menos uma modalidade!");
   const diasHoras=getDiasHoras('a-dias-grid','a-horas-container');
-  db.alunos.push({
-    id:Date.now(),nome,
-    modalidade:modalidades[0], // compatibilidade — primeira como principal
+  const novoAluno={
+    id:Date.now(),
+    nome,
+    modalidade:modalidades[0],
     modalidades,
     diasHoras,
-    plano:document.getElementById('a-plano').value,
-    tel:document.getElementById('a-tel').value,
+    plano:document.getElementById('a-plano').value.trim(),
+    tel:document.getElementById('a-tel').value.trim(),
     nasc:document.getElementById('a-nasc').value,
-    email:document.getElementById('a-email').value,
+    email:document.getElementById('a-email').value.trim(),
     inicio:document.getElementById('a-inicio').value,
-    diaVenc:document.getElementById('a-venc').value
-  });
+    diaVenc:document.getElementById('a-venc').value,
+    ativo:true
+  };
+  db.alunos.push(novoAluno);
   inserirNaAgenda(nome,diasHoras);
+  // limpar campos após montar objeto
   ['a-nome','a-plano','a-tel','a-nasc','a-email','a-inicio','a-venc'].forEach(id=>document.getElementById(id).value='');
   resetModChecks('a-modal-checks');
   resetDias('a-dias-grid','a-horas-container');
@@ -1109,13 +1118,40 @@ function addAluno(){
   checkNotificacoes();
 }
 
+function toggleAtivoAluno(id){
+  const a=db.alunos.find(x=>x.id===id);
+  if(!a)return;
+  const novoEstado=!(a.ativo!==false); // false → true, true/undefined → false
+  const acao=novoEstado?'ativar':'desativar';
+  if(!confirm(`Deseja ${acao} o cadastro de ${a.nome}?`))return;
+  a.ativo=novoEstado;
+  if(!novoEstado){
+    // Remove da agenda todos os eventos recorrentes futuros
+    const hoje_str=hoje();
+    db.agenda=db.agenda.filter(ev=>!(ev.aluno===a.nome&&ev.obs==='Recorrente'&&ev.data>=hoje_str));
+  } else {
+    // Reativa: reinserir na agenda
+    if(a.diasHoras&&a.diasHoras.length)inserirNaAgenda(a.nome,a.diasHoras);
+  }
+  save();
+}
+
 function renderAlunos(){
   const grid=document.getElementById('lista-alunos');
   if(!grid)return;
   const busca=(document.getElementById('busca-aluno')||{}).value||'';
-  const lista=db.alunos.filter(a=>a.nome.toLowerCase().includes(busca.toLowerCase()));
-  if(lista.length===0){grid.innerHTML='<p style="color:#ccc;text-align:center;padding:30px;">Nenhum paciente cadastrado.</p>';return;}
-  const sorted=[...lista].sort((a,b)=>a.nome.localeCompare(b.nome));
+  const mostrarInativos=(document.getElementById('filtro-inativos')||{}).checked;
+  const lista=db.alunos.filter(a=>{
+    if(!a.nome.toLowerCase().includes(busca.toLowerCase()))return false;
+    if(!mostrarInativos&&a.ativo===false)return false;
+    return true;
+  });
+  if(lista.length===0){grid.innerHTML='<p style="color:#ccc;text-align:center;padding:30px;">Nenhum paciente encontrado.</p>';return;}
+  const sorted=[...lista].sort((a,b)=>{
+    const aAtivo=a.ativo!==false?0:1;
+    const bAtivo=b.ativo!==false?0:1;
+    return aAtivo-bAtivo||a.nome.localeCompare(b.nome);
+  });
   const hoje_str=hoje();
   const mesH=parseInt(hoje_str.split('-')[1],10);
   const diaH=parseInt(hoje_str.split('-')[2],10);
@@ -1157,13 +1193,21 @@ function renderAlunos(){
     }
     const diasTag=a.diasHoras&&a.diasHoras.length
       ?`<p style="font-size:0.72rem;color:#888;margin-top:4px;">${a.diasHoras.map(d=>`${DIAS_LABEL_SHORT[d.dia]} ${d.hora}`).join(' · ')}</p>`:'';
-    const anivBadgeOk=anivBadge; const anivBtnOk=anivBtn; // já definidos acima
-    return `<div class="aluno-card" style="border-left-color:${cor};">
+    const isAtivo=a.ativo!==false;
+    const inativoBadge=!isAtivo?`<span class="badge-inativo">Inativo</span>`:'';
+    const toggleLabel=isAtivo
+      ?`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="5" width="22" height="14" rx="7"/><circle cx="8" cy="12" r="3" fill="currentColor"/></svg>`
+      :`<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="5" width="22" height="14" rx="7"/><circle cx="16" cy="12" r="3" fill="currentColor"/></svg>`;
+    const anivBadgeOk=anivBadge; const anivBtnOk=anivBtn;
+    return `<div class="aluno-card${!isAtivo?' inativo':''}" style="border-left-color:${cor};">
       <div class="aluno-actions">
+        <button class="${isAtivo?'btn-edit':'btn-verde'}" onclick="toggleAtivoAluno(${a.id})" title="${isAtivo?'Desativar cadastro':'Ativar cadastro'}" style="${!isAtivo?'background:var(--receita);':'background:#e67e22;'}">
+          ${toggleLabel}
+        </button>
         <button class="btn-edit" onclick="openEditAluno(${a.id})"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
         <button class="btn-del" onclick="del('alunos',${a.id})"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg></button>
       </div>
-      <h4>${a.nome}${anivBadgeOk}</h4>
+      <h4>${a.nome}${inativoBadge}${anivBadgeOk}</h4>
       ${anivBtnOk}
       <p>${mods.map(m=>`<span class="mod-badge mod-${m}">${m}</span>`).join(' ')}</p>
       ${diasTag}
@@ -1204,11 +1248,12 @@ function saveEditAluno(){
   a.modalidades=modalidades;
   a.diasHoras=diasHoras;
   a.plano=document.getElementById('edit-aluno-plano').value;
-  a.tel=document.getElementById('edit-aluno-tel').value;
+  a.tel=document.getElementById('edit-aluno-tel').value.trim();
   a.nasc=document.getElementById('edit-aluno-nasc').value;
-  a.email=document.getElementById('edit-aluno-email').value;
+  a.email=document.getElementById('edit-aluno-email').value.trim();
   a.inicio=document.getElementById('edit-aluno-inicio').value;
   a.diaVenc=document.getElementById('edit-aluno-venc').value;
+  if(a.ativo===undefined)a.ativo=true;
   // re-inserir na agenda se dias mudaram
   if(diasHoras.length){
     db.agenda=(db.agenda||[]).filter(ev=>!(ev.aluno===a.nome&&ev.obs==='Recorrente'));
@@ -1411,6 +1456,8 @@ function renderAgenda(){
       } else {
         evsDaHora.forEach(ev=>{
           const aluno=db.alunos.find(a=>a.nome===ev.aluno);
+          // ocultar eventos de alunos inativos
+          if(aluno&&aluno.ativo===false)return;
           // modalidade: evento pode ter a própria ou pegar do aluno
           const mod=ev.modalidade||(aluno?aluno.modalidade:'');
           const cor=MOD_CORES[mod]||'#546e7a';
