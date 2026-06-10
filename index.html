@@ -191,8 +191,8 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
 .slot-content{flex:1;padding:6px 10px;display:flex;flex-direction:column;gap:3px;}
 .slot-evento{border-radius:6px;padding:4px 8px;font-size:0.75rem;font-weight:600;color:white;cursor:pointer;display:flex;align-items:center;justify-content:space-between;}
 .slot-evento .ev-remove{background:rgba(0,0,0,0.2);border:none;color:white;border-radius:4px;width:16px;height:16px;cursor:pointer;font-size:0.6rem;display:flex;align-items:center;justify-content:center;padding:0;}
-.agenda-week-grid{display:grid;grid-template-columns:repeat(7,minmax(180px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px;}
-@media(max-width:992px){.agenda-week-grid{grid-template-columns:repeat(7,minmax(160px,1fr));}}
+.agenda-week-grid{display:grid;grid-template-columns:repeat(6,minmax(175px,1fr));gap:10px;overflow-x:auto;padding-bottom:8px;-webkit-overflow-scrolling:touch;}
+@media(max-width:992px){.agenda-week-grid{grid-template-columns:repeat(6,minmax(150px,1fr));}}
 
 /* ── HISTORICO ── */
 .historico-timeline{display:flex;flex-direction:column;gap:0;}
@@ -248,6 +248,8 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
   .modal-actions{flex-direction:column;}
   .modal-actions .btn{width:100%;}
   .notif-panel{right:-80px;}
+  .config-card{max-width:100%;}
+  .agenda-toolbar h3{min-width:120px;font-size:0.88rem;}
 }
 @media(max-width:768px){
   .grid-stats{grid-template-columns:repeat(2,1fr);gap:11px;}
@@ -258,6 +260,14 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
   .toolbar-row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;}
   .crm-box{padding:15px;}
   .aluno-grid{grid-template-columns:repeat(auto-fill,minmax(180px,1fr));}
+  .config-card{max-width:100%;}
+  #busca-aluno{max-width:100%!important;}
+  .freq-lote-row{flex-wrap:wrap;gap:8px;}
+  .freq-lote-row .aluno-nome{min-width:100%;font-size:0.82rem;}
+  .freq-lote-row .aluno-mod{min-width:auto;}
+  .freq-lote-row .lote-sel{flex:1;min-width:0;}
+  .cobr-card{flex-direction:column;align-items:flex-start;}
+  .section-header{flex-direction:column;align-items:flex-start;}
 }
 @media(max-width:480px){
   .grid-stats{grid-template-columns:1fr 1fr;gap:9px;}
@@ -268,7 +278,14 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
   main{padding:13px 11px;padding-top:calc(var(--header-h) + 13px);padding-bottom:calc(var(--bottom-nav-h) + 13px);}
   .hide-xs{display:none!important;}
   .modal-box{border-radius:16px;padding:18px 14px;}
-  .agenda-week-grid{grid-template-columns:1fr;}
+  /* agenda: scroll horizontal fluido em vez de 1 coluna empilhada */
+  .agenda-week-grid{display:flex;flex-direction:row;overflow-x:auto;gap:8px;padding-bottom:10px;-webkit-overflow-scrolling:touch;scroll-snap-type:x mandatory;}
+  .agenda-week-grid>div{min-width:82vw;max-width:82vw;scroll-snap-align:start;flex-shrink:0;}
+  .agenda-toolbar h3{min-width:90px;font-size:0.8rem;}
+  .notif-panel{width:92vw;right:-16px;}
+  .freq-lote-row .lote-sel{width:100%;font-size:0.8rem;}
+  table{min-width:420px;}
+  .modal-box{max-height:85vh;}
 }
 </style>
 </head>
@@ -289,6 +306,7 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
     <p id="login-err" style="color:var(--despesa);font-size:0.8rem;margin-top:10px;display:none;">Usuário ou senha incorretos!</p>
   </div>
 </div>
+
 
 <!-- ═══ MODAIS ═══ -->
 <!-- Modal Financeiro Edit -->
@@ -606,7 +624,7 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
         </div>
       </div>
       <div style="margin-bottom:14px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;">
-        <input type="text" id="busca-aluno" placeholder="Buscar paciente..." style="max-width:280px;" oninput="renderAlunos()">
+        <input type="text" id="busca-aluno" placeholder="Buscar paciente..." style="max-width:min(280px,100%);" oninput="renderAlunos()">
         <label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;color:#888;cursor:pointer;">
           <input type="checkbox" id="filtro-inativos" onchange="renderAlunos()" style="width:16px;height:16px;min-height:unset;border-radius:4px;">
           Mostrar inativos
@@ -669,9 +687,21 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
           Registrar Avulso
         </h4>
-        <div class="flex-row">
-          <div class="input-group"><label>Paciente</label><select id="p-nome"><option value="">-- Selecione --</option></select></div>
+        <div class="flex-row" style="flex-wrap:wrap;gap:10px;align-items:flex-end;">
+          <div class="input-group"><label>Paciente</label><select id="p-nome" onchange="autoModAvulso()"><option value="">-- Selecione --</option></select></div>
           <div class="input-group"><label>Data</label><input type="date" id="p-data-avulso"></div>
+          <div class="input-group"><label>Modalidade</label>
+            <select id="p-modalidade-avulso">
+              <option value="">-- Selecione --</option>
+              <option value="PILATES">Pilates</option>
+              <option value="FUNCIONAL">Funcional</option>
+              <option value="RPG">RPG</option>
+              <option value="LIBERACAO">Lib. Miofascial</option>
+              <option value="FISIOTERAPIA">Fisioterapia</option>
+              <option value="COMBO">Combo</option>
+              <option value="OUTROS">Outros</option>
+            </select>
+          </div>
           <button class="btn" onclick="addPresenca()">Registrar</button>
         </div>
       </div>
@@ -691,11 +721,20 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
       <h2 class="section-title">Histórico Clínico</h2>
       <div class="crm-box">
         <div class="flex-row" style="align-items:flex-end;flex-wrap:wrap;gap:10px;">
-          <div class="input-group" style="min-width:200px;"><label>Buscar por nome</label>
-            <input type="text" id="hist-busca-nome" placeholder="Digite o nome..." oninput="filtrarHistoricoSelect()">
-          </div>
-          <div class="input-group" style="min-width:200px;"><label>Selecionar Paciente</label>
-            <select id="hist-aluno-sel" onchange="renderHistorico()"><option value="">-- Selecione um paciente --</option></select>
+          <div style="display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;width:100%;">
+            <div class="input-group" style="position:relative;flex:1;min-width:180px;">
+              <label>🔍 Buscar por nome</label>
+              <input type="text" id="hist-busca-nome" placeholder="Digite para filtrar..." autocomplete="off"
+                oninput="filtrarHistoricoSelect()" style="padding-right:32px;">
+              <span id="hist-busca-clear" onclick="histLimparBusca()" title="Limpar"
+                style="display:none;position:absolute;right:10px;top:50%;transform:translateY(4px);cursor:pointer;color:#bbb;font-size:1.1rem;line-height:1;">✕</span>
+            </div>
+            <div class="input-group" style="flex:1;min-width:200px;">
+              <label>Selecionar Paciente</label>
+              <select id="hist-aluno-sel" onchange="renderHistorico()" style="font-weight:600;color:var(--marrom);">
+                <option value="">-- Selecione um paciente --</option>
+              </select>
+            </div>
           </div>
           <button class="btn" onclick="openNovaEvol()" id="btn-nova-evol" style="display:none;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
@@ -757,16 +796,37 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 01-2-2V5a2 2 0 012-2h11l5 5v11a2 2 0 01-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
           Backup de Dados
         </h3>
-        <div class="flex-row" style="flex-direction:row;flex-wrap:wrap;">
+        <div class="flex-row" style="flex-direction:row;flex-wrap:wrap;gap:10px;">
           <button class="btn btn-alt" onclick="exportBackup()" style="width:auto;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-            Exportar
+            Exportar Backup
           </button>
-          <label class="btn btn-pdf" style="cursor:pointer;width:auto;">
+          <label class="btn btn-verde" style="cursor:pointer;width:auto;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            Importar
+            Importar (Mesclar)
             <input type="file" hidden id="importFile" onchange="importBackup(event)" accept=".json">
           </label>
+          <label class="btn btn-pdf" style="cursor:pointer;width:auto;" title="Substitui TODOS os dados pelo arquivo. Use com cuidado!">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 102.13-9.36L1 10"/></svg>
+            Restaurar Completo
+            <input type="file" hidden id="importFileRestore" onchange="importRestore(event)" accept=".json">
+          </label>
+        </div>
+        <p style="font-size:0.75rem;color:#aaa;margin-top:10px;line-height:1.5;">
+          <strong style="color:var(--receita);">Importar (Mesclar)</strong> — adiciona os dados do arquivo sem apagar o que já existe. Seguro para uso diário.<br>
+          <strong style="color:var(--despesa);">Restaurar Completo</strong> — substitui tudo pelo arquivo. Use apenas se quiser voltar um estado anterior.
+        </p>
+      </div>
+
+      <!-- Modal preview importação -->
+      <div class="modal-overlay" id="modal-import-preview" style="display:none;">
+        <div class="modal-box" style="max-width:480px;">
+          <h3>📋 Prévia da Importação</h3>
+          <div id="import-preview-content" style="font-size:0.85rem;line-height:1.8;"></div>
+          <div class="modal-actions" style="margin-top:16px;">
+            <button class="btn btn-verde" onclick="confirmarImport()">Confirmar Mesclagem</button>
+            <button class="btn btn-alt" onclick="cancelarImport()">Cancelar</button>
+          </div>
         </div>
       </div>
     </section>
@@ -1469,11 +1529,12 @@ function agendaHoje(){agendaBaseDate=new Date();agendaBaseDate.setHours(0,0,0,0)
 function irParaData(val){if(!val)return;agendaBaseDate=new Date(val+'T00:00:00');renderAgenda();}
 
 function getWeekDays(base){
+  const dow=base.getDay();
+  const diffToMon=(dow===0)?1:(1-dow);
+  const mon=new Date(base.getTime()+diffToMon*24*60*60*1000);
+  mon.setHours(0,0,0,0);
   const days=[];
-  for(let i=0;i<7;i++){
-    const d=new Date(base.getTime()+i*24*60*60*1000);
-    days.push(d);
-  }
+  for(let i=0;i<6;i++)days.push(new Date(mon.getTime()+i*24*60*60*1000));
   return days;
 }
 
@@ -1485,7 +1546,7 @@ function dateKey(d){return d.toISOString().slice(0,10);}
 
 function renderAgenda(){
   const days=getWeekDays(agendaBaseDate);
-  const label=`${days[0].getDate()} ${MESES[days[0].getMonth()]} — ${days[6].getDate()} ${MESES[days[6].getMonth()]} ${days[6].getFullYear()}`;
+  const label=`${days[0].getDate()} ${MESES[days[0].getMonth()]} — ${days[days.length-1].getDate()} ${MESES[days[days.length-1].getMonth()]} ${days[days.length-1].getFullYear()}`;
   document.getElementById('agenda-semana-label').textContent=label;
 
   const container=document.getElementById('agenda-week-container');
@@ -1697,11 +1758,23 @@ function salvarFreqLote(){
 function addPresenca(){
   const nome=document.getElementById('p-nome').value;
   const data=document.getElementById('p-data-avulso').value;
+  const modalidadeSel=document.getElementById('p-modalidade-avulso').value;
   if(!nome||!data)return alert("Selecione paciente e data!");
   const aluno=db.alunos.find(a=>a.nome===nome);
-  db.presenca.unshift({id:Date.now(),aluno:nome,data,status:'P',obs:'',modalidade:aluno?aluno.modalidade:''});
+  const modalidade=modalidadeSel||(aluno?aluno.modalidade:'');
+  db.presenca.unshift({id:Date.now(),aluno:nome,data,status:'P',obs:'',modalidade});
   document.getElementById('p-nome').value='';
+  document.getElementById('p-modalidade-avulso').value='';
   save();
+}
+
+function autoModAvulso(){
+  const nome=document.getElementById('p-nome').value;
+  const aluno=db.alunos.find(a=>a.nome===nome);
+  if(!aluno)return;
+  const sel=document.getElementById('p-modalidade-avulso');
+  const mod=(aluno.modalidades&&aluno.modalidades.length)?aluno.modalidades[0]:aluno.modalidade||'';
+  if(mod)sel.value=mod;
 }
 
 function updatePres(id,campo,valor){
@@ -1740,10 +1813,24 @@ function populateHistoricoSelect(){populateSelects();}
 function filtrarHistoricoSelect(){
   const busca=(document.getElementById('hist-busca-nome').value||'').toLowerCase();
   const sel=document.getElementById('hist-aluno-sel');
-  const sorted=[...db.alunos].filter(a=>a.nome.toLowerCase().includes(busca)).sort((a,b)=>a.nome.localeCompare(b.nome));
+  const clear=document.getElementById('hist-busca-clear');
+  if(clear)clear.style.display=busca?'block':'none';
+  const sorted=[...db.alunos].filter(a=>a.ativo!==false&&a.nome.toLowerCase().includes(busca)).sort((a,b)=>a.nome.localeCompare(b.nome));
   const cur=sel.value;
-  sel.innerHTML='<option value="">-- Selecione um paciente --</option>'+sorted.map(a=>`<option value="${a.nome}" ${cur===a.nome?'selected':''}>${a.nome}</option>`).join('');
+  sel.innerHTML='<option value="">-- Selecione um paciente --</option>'+sorted.map(a=>`<option value="${a.nome}"${cur===a.nome?' selected':''}>${a.nome}</option>`).join('');
+  // se só um resultado, seleciona automaticamente
+  if(sorted.length===1){sel.value=sorted[0].nome;renderHistorico();}
+  else if(cur&&sorted.find(a=>a.nome===cur)){sel.value=cur;}
 }
+function histLimparBusca(){
+  document.getElementById('hist-busca-nome').value='';
+  document.getElementById('hist-aluno-sel').value='';
+  const clear=document.getElementById('hist-busca-clear');
+  if(clear)clear.style.display='none';
+  filtrarHistoricoSelect();
+  renderHistorico();
+}
+function populateHistoricoSelect(){filtrarHistoricoSelect();}
 
 function renderHistorico(){
   const sel=document.getElementById('hist-aluno-sel');
@@ -1760,17 +1847,27 @@ function renderHistorico(){
   const aluno=db.alunos.find(a=>a.nome===nome);
   if(aluno){
     infoBox.style.display='block';
-    const mods=(aluno.modalidades||[aluno.modalidade]).map(m=>`<span class="mod-badge mod-${m}" style="font-size:0.72rem;padding:4px 10px;">${m}</span>`).join(' ');
+    const modsArr=[...(aluno.modalidades||[])];
+    if(!modsArr.length&&aluno.modalidade)modsArr.push(aluno.modalidade);
+    const modsValidas=modsArr.filter(Boolean);
+    const mods=modsValidas.length
+      ?modsValidas.map(m=>`<span class="mod-badge mod-${m}" style="font-size:0.72rem;padding:4px 10px;">${m}</span>`).join(' ')
+      :'<span style="font-size:0.78rem;color:#bbb;">Sem modalidade cadastrada</span>';
     document.getElementById('hist-paciente-detalhe').innerHTML=`
-      <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
-        <div>
-          <div style="font-weight:700;font-size:1rem;color:var(--marrom);">${aluno.nome}</div>
-          <div style="font-size:0.78rem;color:#888;margin-top:3px;">${aluno.email||'—'} · ${aluno.tel||'—'}</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;align-items:center;">
+          <div>
+            <div style="font-weight:700;font-size:1rem;color:var(--marrom);">${aluno.nome}</div>
+            <div style="font-size:0.78rem;color:#888;margin-top:3px;">${aluno.email||'—'} · ${aluno.tel||'—'}</div>
+          </div>
+          ${aluno.nasc?`<span style="font-size:0.78rem;color:#888;">Nasc: ${fmtData(aluno.nasc)}</span>`:''}
+          ${aluno.inicio?`<span style="font-size:0.78rem;color:#888;">Início: ${fmtData(aluno.inicio)}</span>`:''}
         </div>
-        ${mods}
-        ${aluno.nasc?`<span style="font-size:0.78rem;color:#888;">Nasc: ${fmtData(aluno.nasc)}</span>`:''}
-        ${aluno.inicio?`<span style="font-size:0.78rem;color:#888;">Início: ${fmtData(aluno.inicio)}</span>`:''}
-      </div>`;
+        <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;">
+          <span style="font-size:0.75rem;color:#aaa;font-weight:600;margin-right:4px;">MODALIDADES:</span>
+          ${mods}
+        </div>
+      </div>`
   }
 
   const evols=(db.historico||[]).filter(h=>h.aluno===nome).sort((a,b)=>b.data.localeCompare(a.data));
@@ -1988,9 +2085,66 @@ function exportBackup(){
   a.href=s;a.download=`fisiopilatinus_${hoje()}.json`;a.click();
 }
 
+let _importPendingData=null;
+
 function importBackup(event){
   const file=event.target.files[0];
   if(!file)return;
+  event.target.value='';
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const dados=JSON.parse(e.target.result);
+      const chaves=['financeiro','presenca','agenda','alunos','historico','pagamentos'];
+      chaves.forEach(k=>{if(!dados[k])dados[k]=[];});
+
+      // calcula diff
+      const diff={};
+      chaves.forEach(k=>{
+        const idsLocais=new Set((db[k]||[]).map(x=>x.id));
+        diff[k]=(dados[k]||[]).filter(x=>!idsLocais.has(x.id));
+      });
+
+      const total=Object.values(diff).reduce((s,a)=>s+a.length,0);
+      const linhas=chaves.map(k=>{
+        const n=diff[k].length;
+        return n>0?`<div>✅ <strong>${k}</strong>: +${n} registro${n>1?'s':''} novo${n>1?'s':''}</div>`:null;
+      }).filter(Boolean).join('');
+
+      _importPendingData=diff;
+
+      document.getElementById('import-preview-content').innerHTML=total===0
+        ?'<p style="color:#aaa;">Nenhum dado novo encontrado no arquivo. Seus dados já estão atualizados.</p>'
+        :`<p style="margin-bottom:10px;">Os seguintes registros <strong>novos</strong> serão adicionados aos seus dados atuais:</p>${linhas}<p style="margin-top:12px;color:#888;font-size:0.78rem;">Nenhum dado existente será apagado ou substituído.</p>`;
+
+      document.getElementById('modal-import-preview').style.display='flex';
+    }catch{alert("Arquivo inválido ou corrompido!");}
+  };
+  r.readAsText(file);
+}
+
+function confirmarImport(){
+  if(!_importPendingData)return;
+  const chaves=['financeiro','presenca','agenda','alunos','historico','pagamentos'];
+  chaves.forEach(k=>{
+    db[k]=[...(db[k]||[]),...(_importPendingData[k]||[])];
+  });
+  _importPendingData=null;
+  saveLocal();
+  document.getElementById('modal-import-preview').style.display='none';
+  location.reload();
+}
+
+function cancelarImport(){
+  _importPendingData=null;
+  document.getElementById('modal-import-preview').style.display='none';
+}
+
+function importRestore(event){
+  const file=event.target.files[0];
+  if(!file)return;
+  event.target.value='';
+  if(!confirm("⚠️ ATENÇÃO\n\nIsso vai SUBSTITUIR todos os dados pelo arquivo selecionado.\n\nTodo o trabalho feito hoje será perdido.\n\nTem certeza?"))return;
   const r=new FileReader();
   r.onload=e=>{
     try{
@@ -2078,6 +2232,7 @@ window.onload=()=>{
     initApp(localStorage.getItem('fp_user')||DEFAULT_USER);
     renderAgenda();
   }
+
 };
 </script>
 </body>
