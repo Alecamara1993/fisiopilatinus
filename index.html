@@ -744,6 +744,10 @@ td{padding:10px 14px;border-top:1px solid #f7f0ee;font-size:0.81rem;vertical-ali
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             PDF Histórico
           </button>
+          <button class="btn btn-del" onclick="delHistoricoCompleto()" id="btn-del-hist" style="display:none;background:#c0392b;border-radius:10px;padding:8px 14px;font-size:0.8rem;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a1 1 0 011-1h4a1 1 0 011 1v2"/></svg>
+            Excluir Histórico
+          </button>
         </div>
       </div>
       <div id="hist-info-paciente" style="display:none;" class="crm-box" style="background:#fefaf9;">
@@ -889,7 +893,9 @@ function fmtData(s){return s?s.split('-').reverse().join('/'):'—';}
 
 function hoje(){
   const d=new Date();
-  return d.toISOString().slice(0,10);
+  const mm=String(d.getMonth()+1).padStart(2,'0');
+  const dd=String(d.getDate()).padStart(2,'0');
+  return `${d.getFullYear()}-${mm}-${dd}`;
 }
 
 /* ══ NAV ══ */
@@ -947,6 +953,9 @@ function logout(){sessionStorage.removeItem('fp_logged');location.reload();}
 function initApp(user){
   document.getElementById('f-data').valueAsDate=new Date();
   document.getElementById('cur-user').value=user;
+  // migra alunos com poucos slots (8 semanas) → 2 anos
+  const doisAnos=new Date();doisAnos.setFullYear(doisAnos.getFullYear()+2);
+  ensureAgendaGerada(doisAnos);
   renderAll();
   populateSelects();
   checkNotificacoes();
@@ -1194,19 +1203,41 @@ function setDias(diasGridId,horasContainerId,diasHoras){
   });
 }
 
-/* ── Inserir na agenda as datas recorrentes (próximas 8 semanas a partir de hoje) ── */
-function inserirNaAgenda(nome,diasHoras){
+/* ── Gera slots recorrentes para um aluno a partir de uma data base até N semanas ── */
+function inserirNaAgenda(nome,diasHoras,baseDate,semanas){
   if(!diasHoras||!diasHoras.length)return;
   if(!db.agenda)db.agenda=[];
-  const base=new Date();base.setHours(0,0,0,0);
-
+  const base=baseDate||new Date();
+  base.setHours(0,0,0,0);
+  const totalSemanas=semanas||104; // padrão: 2 anos
+  // índice rápido de existência para não duplicar
+  const existe=new Set(db.agenda.filter(ev=>ev.aluno===nome&&ev.obs==='Recorrente').map(ev=>ev.data+'|'+ev.hora));
   diasHoras.forEach(({dia,hora,modalidade})=>{
-    const diffInicio=(dia-base.getDay()+7)%7;
-    for(let w=0;w<8;w++){
+    const diffInicio=((dia-base.getDay())+7)%7;
+    for(let w=0;w<totalSemanas;w++){
       const target=new Date(base.getTime()+(diffInicio+w*7)*24*60*60*1000);
-      const dataKey=target.toISOString().slice(0,10);
-      const jaExiste=db.agenda.find(ev=>ev.data===dataKey&&ev.hora===hora&&ev.aluno===nome);
-      if(!jaExiste)db.agenda.push({id:Date.now()+Math.random(),data:dataKey,hora,aluno:nome,modalidade:modalidade||'',manual:'',obs:'Recorrente'});
+      const dataKey=dateKey(target);
+      const key=dataKey+'|'+hora;
+      if(!existe.has(key)){
+        existe.add(key);
+        db.agenda.push({id:Date.now()+Math.random(),data:dataKey,hora,aluno:nome,modalidade:modalidade||'',manual:'',obs:'Recorrente'});
+      }
+    }
+  });
+}
+
+/* ── Garante que alunos ativos tenham agenda gerada até a semana visível ── */
+function ensureAgendaGerada(ateData){
+  db.alunos.filter(a=>a.ativo!==false&&a.diasHoras&&a.diasHoras.length).forEach(a=>{
+    // encontra o último slot recorrente deste aluno
+    const slots=db.agenda.filter(ev=>ev.aluno===a.nome&&ev.obs==='Recorrente').map(ev=>ev.data).sort();
+    const ultimo=slots.length?slots[slots.length-1]:'';
+    const ate=dateKey(ateData);
+    if(ultimo<ate){
+      // gera a partir do último slot (ou hoje) até 1 ano além da data visível
+      const base=ultimo?new Date(ultimo+'T12:00:00'):new Date();
+      const semanas=Math.ceil(((ateData.getTime()-base.getTime())/(7*24*60*60*1000)))+52;
+      inserirNaAgenda(a.nome,a.diasHoras,base,Math.max(semanas,52));
     }
   });
 }
@@ -1254,8 +1285,11 @@ function toggleAtivoAluno(id){
     const hoje_str=hoje();
     db.agenda=db.agenda.filter(ev=>!(ev.aluno===a.nome&&ev.obs==='Recorrente'&&ev.data>=hoje_str));
   } else {
-    // Reativa: reinserir na agenda
-    if(a.diasHoras&&a.diasHoras.length)inserirNaAgenda(a.nome,a.diasHoras);
+    // Reativa: reinserir na agenda a partir de hoje por 2 anos
+    if(a.diasHoras&&a.diasHoras.length){
+      const base=new Date();base.setHours(0,0,0,0);
+      inserirNaAgenda(a.nome,a.diasHoras,base,104);
+    }
   }
   save();
 }
@@ -1276,9 +1310,9 @@ function renderAlunos(){
     const bAtivo=b.ativo!==false?0:1;
     return aAtivo-bAtivo||a.nome.localeCompare(b.nome);
   });
-  const hoje_str=hoje();
-  const mesH=parseInt(hoje_str.split('-')[1],10);
-  const diaH=parseInt(hoje_str.split('-')[2],10);
+  const _hoje=new Date();
+  const mesH=_hoje.getMonth()+1; // 1-12, local
+  const diaH=_hoje.getDate();    // 1-31, local
 
   grid.innerHTML=sorted.map(a=>{
     const mods=a.modalidades||[a.modalidade];
@@ -1388,10 +1422,16 @@ function saveEditAluno(){
   a.inicio=document.getElementById('edit-aluno-inicio').value;
   a.diaVenc=document.getElementById('edit-aluno-venc').value;
   if(a.ativo===undefined)a.ativo=true;
-  // re-inserir na agenda se dias mudaram
+  // re-inserir na agenda com novos dias (remove futuros recorrentes e regera 2 anos)
   if(diasHoras.length){
-    db.agenda=(db.agenda||[]).filter(ev=>!(ev.aluno===a.nome&&ev.obs==='Recorrente'));
-    inserirNaAgenda(a.nome,diasHoras);
+    const hoje_str=hoje();
+    db.agenda=(db.agenda||[]).filter(ev=>!(ev.aluno===a.nome&&ev.obs==='Recorrente'&&ev.data>=hoje_str));
+    const base=new Date();base.setHours(0,0,0,0);
+    inserirNaAgenda(a.nome,diasHoras,base,104);
+  } else {
+    // removeu todos os dias — limpar futuros
+    const hoje_str=hoje();
+    db.agenda=(db.agenda||[]).filter(ev=>!(ev.aluno===a.nome&&ev.obs==='Recorrente'&&ev.data>=hoje_str));
   }
   closeModal('modal-aluno');
   save();
@@ -1401,13 +1441,16 @@ function saveEditAluno(){
 /* ══ SELECTS ══ */
 function populateSelects(){
   const sorted=[...db.alunos].sort((a,b)=>a.nome.localeCompare(b.nome));
+  const ativos=sorted.filter(a=>a.ativo!==false);
   const ids=['f-aluno','p-nome','edit-fin-aluno','ag-aluno','hist-aluno-sel','filtro-aluno-fin'];
   ids.forEach(sid=>{
     const sel=document.getElementById(sid);
     if(!sel)return;
     const cur=sel.value;
     const ph=sel.id==='edit-fin-aluno'?'-- Nenhum --':'-- Selecione --';
-    sel.innerHTML=`<option value="">${ph}</option>`+sorted.map(a=>`<option value="${a.nome}" ${cur===a.nome?'selected':''}>${a.nome}</option>`).join('');
+    // p-nome (registro avulso frequência) só mostra ativos
+    const lista=(sid==='p-nome')?ativos:sorted;
+    sel.innerHTML=`<option value="">${ph}</option>`+lista.map(a=>`<option value="${a.nome}" ${cur===a.nome?'selected':''}>${a.nome}</option>`).join('');
   });
 }
 
@@ -1542,9 +1585,13 @@ const DIAS_SEMANA=['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
 const MESES=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 const HORAS=['06:00','07:00','08:00','09:00','10:00','11:00','12:00','13:00','14:00','15:00','16:00','17:00','18:00','19:00'];
 
-function dateKey(d){return d.toISOString().slice(0,10);}
+function dateKey(d){const mm=String(d.getMonth()+1).padStart(2,'0');const dd=String(d.getDate()).padStart(2,'0');return `${d.getFullYear()}-${mm}-${dd}`;}
 
 function renderAgenda(){
+  // garante que alunos ativos tenham slots até além da semana visível
+  const daysTemp=getWeekDays(agendaBaseDate);
+  ensureAgendaGerada(daysTemp[daysTemp.length-1]);
+
   const days=getWeekDays(agendaBaseDate);
   const label=`${days[0].getDate()} ${MESES[days[0].getMonth()]} — ${days[days.length-1].getDate()} ${MESES[days[days.length-1].getMonth()]} ${days[days.length-1].getFullYear()}`;
   document.getElementById('agenda-semana-label').textContent=label;
@@ -1572,7 +1619,14 @@ function renderAgenda(){
     slots.className='agenda-slots';
 
     HORAS.forEach(hora=>{
-      const evsDaHora=eventos.filter(e=>e.hora===hora);
+      const _MOD_ORDER=['PILATES','FUNCIONAL','RPG','LIBERACAO','FISIOTERAPIA','COMBO','OUTROS'];
+      const evsDaHora=eventos.filter(e=>e.hora===hora).sort((a,b)=>{
+        const mA=a.modalidade||(db.alunos.find(x=>x.nome===a.aluno)||{}).modalidade||'ZZZ';
+        const mB=b.modalidade||(db.alunos.find(x=>x.nome===b.aluno)||{}).modalidade||'ZZZ';
+        const iA=_MOD_ORDER.indexOf(mA)<0?99:_MOD_ORDER.indexOf(mA);
+        const iB=_MOD_ORDER.indexOf(mB)<0?99:_MOD_ORDER.indexOf(mB);
+        return iA-iB||(a.aluno||'').localeCompare(b.aluno||'');
+      });
       const slot=document.createElement('div');
       slot.className='agenda-slot';
 
@@ -1837,13 +1891,15 @@ function renderHistorico(){
   const nome=sel.value;
   const btnEvol=document.getElementById('btn-nova-evol');
   const btnPdf=document.getElementById('btn-hist-pdf');
+  const btnDel=document.getElementById('btn-del-hist');
   const infoBox=document.getElementById('hist-info-paciente');
   const timeline=document.getElementById('hist-timeline');
 
-  if(!nome){btnEvol.style.display='none';btnPdf.style.display='none';infoBox.style.display='none';timeline.innerHTML='';return;}
+  if(!nome){btnEvol.style.display='none';btnPdf.style.display='none';if(btnDel)btnDel.style.display='none';infoBox.style.display='none';timeline.innerHTML='';return;}
 
   btnEvol.style.display='inline-flex';
   btnPdf.style.display='inline-flex';
+  if(btnDel)btnDel.style.display='inline-flex';
   const aluno=db.alunos.find(a=>a.nome===nome);
   if(aluno){
     infoBox.style.display='block';
@@ -1961,6 +2017,18 @@ function salvarEvol(){
 function delEvol(id){
   if(!confirm("Excluir esta evolução?"))return;
   db.historico=db.historico.filter(x=>x.id!==id);
+  saveLocal();
+  renderHistorico();
+}
+
+function delHistoricoCompleto(){
+  const nome=document.getElementById('hist-aluno-sel').value;
+  if(!nome)return;
+  const total=(db.historico||[]).filter(h=>h.aluno===nome).length;
+  if(total===0)return alert('Este paciente não possui histórico registrado.');
+  if(!confirm(`⚠️ Tem certeza que deseja excluir TODO o histórico clínico de "${nome}"?\n\n${total} registro${total>1?'s serão apagados':' será apagado'}. Esta ação não pode ser desfeita.`))return;
+  if(!confirm(`🔴 Confirmação final:\n\nExcluir permanentemente o histórico de "${nome}"?`))return;
+  db.historico=(db.historico||[]).filter(h=>h.aluno!==nome);
   saveLocal();
   renderHistorico();
 }
@@ -2158,13 +2226,54 @@ function importRestore(event){
 
 /* ══ PDF ══ */
 function exportFrequenciaPDF(){
+  // Usa a data selecionada no campo "Data da Aula" ou pede ao usuário
+  const dataInput=document.getElementById('p-data');
+  const dataSel=dataInput?dataInput.value:'';
+  if(!dataSel)return alert('Selecione uma data na aba Frequência para gerar o PDF do dia.');
+
+  // Só agendamentos do dia, sem inativos
+  const agendamentos=(db.agenda||[])
+    .filter(ev=>ev.data===dataSel&&(ev.aluno||ev.manual))
+    .filter(ev=>{
+      if(!ev.aluno)return true;
+      const a=db.alunos.find(x=>x.nome===ev.aluno);
+      return !a||a.ativo!==false;
+    })
+    .sort((a,b)=>a.hora.localeCompare(b.hora));
+
+  if(!agendamentos.length)return alert('Nenhum agendamento ativo encontrado para esta data.');
+
   const{jsPDF}=window.jspdf;
   const doc=new jsPDF();
+  const dataFmt=fmtData(dataSel);
+
   doc.setFont('helvetica','bold');
-  doc.text("Relatório de Frequência — Fisio Pilatinus",14,15);
-  const rows=db.presenca.map(p=>[fmtData(p.data),p.aluno,p.modalidade||'',p.status,p.obs]);
-  doc.autoTable({head:[['Data','Paciente','Modalidade','Status','Obs']],body:rows,startY:22});
-  doc.save('frequencia_fisiopilatinus.pdf');
+  doc.setFontSize(14);
+  doc.text('Lista de Presença — Fisio Pilatinus',14,15);
+  doc.setFontSize(10);
+  doc.setFont('helvetica','normal');
+  doc.text(`Data: ${dataFmt}   Total: ${agendamentos.length} paciente${agendamentos.length>1?'s':''}`,14,23);
+
+  const rows=agendamentos.map(ev=>{
+    const nome=ev.aluno||ev.manual||'—';
+    const mod=ev.modalidade||(db.alunos.find(a=>a.nome===nome)||{}).modalidade||'—';
+    const pres=db.presenca.find(p=>p.aluno===nome&&p.data===dataSel&&p.hora===ev.hora);
+    const status=pres?{P:'Presente',F:'Falta',D:'Desmarcou',R:'Reposição'}[pres.status]||pres.status:'—';
+    const obs=pres?pres.obs||'':'';
+    return [ev.hora,nome,mod,status,obs];
+  });
+
+  doc.autoTable({
+    head:[['Horário','Paciente','Modalidade','Presença','Obs']],
+    body:rows,
+    startY:29,
+    styles:{fontSize:9,cellPadding:4},
+    headStyles:{fillColor:[74,43,31],textColor:255,fontStyle:'bold'},
+    alternateRowStyles:{fillColor:[250,245,243]},
+    columnStyles:{0:{cellWidth:20},2:{cellWidth:30},3:{cellWidth:24}}
+  });
+
+  doc.save(`presenca_${dataSel}.pdf`);
 }
 
 function exportFinanceiroExcel(){
