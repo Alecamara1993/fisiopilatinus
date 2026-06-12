@@ -1898,9 +1898,10 @@ function renderPresenca(){
 
   // popular select de pacientes se necessário
   const selNome=document.getElementById('filtro-pres-nome');
-  if(selNome&&selNome.options.length<=1){
-    const nomes=[...new Set(db.presenca.map(p=>p.aluno))].sort();
-    nomes.forEach(n=>{const o=document.createElement('option');o.value=n;o.textContent=n;selNome.appendChild(o);});
+  if(selNome){
+    const cur=selNome.value;
+    const nomes=[...new Set(db.presenca.map(p=>p.aluno))].filter(Boolean).sort((a,b)=>a.localeCompare(b));
+    selNome.innerHTML='<option value="">— Todos —</option>'+nomes.map(n=>`<option value="${n}"${n===cur?' selected':''}>${n}</option>`).join('');
   }
 
   const sorted=[...db.presenca]
